@@ -4,7 +4,7 @@ from pyomo.opt import SolverFactory
 import pandas as pd
 import numpy as np
 import csv
-
+import os
 
 
 class modele : 
@@ -22,7 +22,8 @@ class modele :
         # Months 
         self.m = ["jan","feb", "mar","apr","jun","jul","aug","sep","oct","nov","dec"]
         # Technologies 
-        self.tec = list(self.Q_tec.index)
+        #self.tec = list(self.Q_tec.index)
+        self.tec = ["offshore","onshore","pv","river","lake","biogas","phs","battery","methanation"]
         # Storage technologies
         self.stor = ["phs","battery","methanation"]
         # Power plants
@@ -31,15 +32,11 @@ class modele :
         self.vre = ["offshore","onshore","pv"]
         
         
-        # Non combustible generation tec
-        #self.ncomb = ["offshore","onshore","pv","phs","battery"]
-        # Combustible generation tec
-        #self.comb = ["biogas","methanation"]
-        
         # Technologies for upward FRR 
-        self.frr = ["phs","battery"] + ["lake"]*("lake" in self.gen)
+        #self.frr = ["phs","battery"] + ["lake"]*("lake" in self.gen)
+        self.frr = ["phs","battery","lake"]
         
-        print("Technologies utilisées :", self.tec)
+        print("Technologies utilisées :", [i for i in self.tec if self.Q_tec[i]>0])
         
         # Initialisation du modèle Pyomo 
         self.model = pyo.ConcreteModel()
@@ -226,11 +223,9 @@ class modele :
         self.model.generation_capacity_constraint = pyo.Constraint(self.model.h, self.model.tec, rule=self.generation_capacity_constraint_rule)
         self.model.generation_biogas = pyo.Constraint(rule=self.biogas_constraint_rule)
         
-        if ("river" in self.tec) : 
-            self.model.generation_river = pyo.Constraint(self.model.h, rule=self.generation_river_rule)
+        self.model.generation_river = pyo.Constraint(self.model.h, rule=self.generation_river_rule)
             
-        if ("lake" in self.tec) : 
-            self.model.lake_constraint = pyo.Constraint(self.model.months, rule = self.lake_reserve_constraint_rule)
+        self.model.lake_constraint = pyo.Constraint(self.model.months, rule = self.lake_reserve_constraint_rule)
 
         # contraintes sur les frr
         self.model.frr_constraint =  pyo.Constraint(self.model.h, self.model.frr, rule=self.frr_capacity_constraint_rule)
@@ -256,6 +251,13 @@ class modele :
         self.results = opt.solve(self.model)
         
     
+    def run(self):
+        self.init_set()
+        self.init_variable()
+        self.add_constraints()
+        self.optimisation()
+        print("Simulation du modèle faite avec succès ! ")
+    
     def cost(self):
         """Return total cost (billion euros) and cost per MWh produced (euros/MWh) """
         
@@ -271,10 +273,25 @@ class modele :
         c_mwh_produced = c_tot*1000/sumgene
         res = pd.DataFrame([[c_tot,c_mwh_produced]], columns = ["COST (billion euros)", "Cost per MWh produced (euros/MWh)"])
         return res
+    
         
     def write_results(self, model_name):
         print("Ecriture des résultats ..." )
-        hourly_file = model_name + "_hourly_generation.csv"
+        if not os.path.exists(model_name):
+            os.makedirs(model_name)
+        
+        #enregistrement des données d'entrées du modèle
+        Q_file = model_name + "/" + model_name + "_Q.csv"
+        self.Q_tec.to_csv(Q_file)
+        
+        S_file = model_name + "/" + model_name + "_S.csv"
+        self.S.to_csv(S_file)
+        
+        Volume_file = model_name + "/" + model_name + "_Volume.csv"
+        self.Volume_str.to_csv(Volume_file)
+        
+        #enregistrement des résultats du modèle
+        hourly_file = model_name + "/" + model_name + "_hourly_generation.csv"
         
         with open(hourly_file,"w",newline="") as hourly:
             hourly_writer = csv.writer(hourly)
@@ -317,7 +334,7 @@ class modele :
                 hourly_data.append(round(self.demand_2050[hour],2))
                 hourly_writer.writerow(hourly_data)
                 
-            print("Simulation du modèle faite avec succès ! ")
+            
         return pd.read_csv(hourly_file) 
 
         
