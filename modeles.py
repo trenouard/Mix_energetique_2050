@@ -71,7 +71,7 @@ class modele :
         s_capex = [0,0,84.16086]
         self.s_capex = pd.Series(s_capex, index = self.stor)
         # charging related fOM of storage in M€/GW/year
-        s_opex = [7.5,0,59.25]
+        s_opex = [0,0,59.25]
         self.s_opex = pd.Series(s_opex, index = self.stor)
 
 
@@ -261,16 +261,15 @@ class modele :
     def cost(self):
         """Return total cost (billion euros) and cost per MWh produced (euros/MWh) """
         
+        const1 = sum((self.Q_tec[tec] - self.capa_ex[tec]) * self.capex[tec] for tec in self.tec) 
+        const2 =  sum((self.Volume_str[storage_tecs]) * self.capex_en[storage_tecs] for storage_tecs in self.stor)
+        const3 =  sum(self.Q_tec[tec] * self.fOM[tec] for tec in self.tec)
+        const4 =  sum(self.S[storage_tecs] * (self.s_opex[storage_tecs] + self.s_capex[storage_tecs]) for storage_tecs in self.stor)
         
-        const = sum((self.Q_tec[tec] - self.capa_ex[tec]) * self.capex[tec] for tec in self.model.tec) \
-           + sum((self.Volume_str[storage_tecs]) * self.capex_en[storage_tecs] for storage_tecs in self.model.str)\
-           + sum(self.Q_tec[tec] * self.fOM[tec] for tec in self.model.tec)\
-           + sum(self.S[storage_tecs] * (self.s_opex[storage_tecs] + self.s_capex[storage_tecs]) for storage_tecs in self.model.str)
-        
-        
-        sumgene = sum(pyo.value(self.model.gene[gen,hour]) for hour in self.model.h for gen in self.model.gen) / 1000
-        c_tot = pyo.value(self.model.objective) +const
-        c_mwh_produced = c_tot*1000/sumgene
+        const = const1+const2+const3+const4
+        sumgene = sum(pyo.value(self.model.gene[gen,hour]) for hour in self.model.h for gen in self.model.gen) 
+        c_tot = pyo.value(self.model.objective) +const/1000
+        c_mwh_produced = c_tot/sumgene
         res = pd.DataFrame([[c_tot,c_mwh_produced]], columns = ["COST (billion euros)", "Cost per MWh produced (euros/MWh)"])
         return res
     
